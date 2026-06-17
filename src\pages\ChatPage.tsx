@@ -121,31 +121,25 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
 
   // ── Voice input ──
   const wantsToListen = useRef(false);
-  const finalTextRef = useRef(''); // accumulated final (non-interim) text across restarts
+  const finalTextRef = useRef('');
 
-  const createRecognition = useCallback(() => {
-    if (!SpeechRecognitionAPI) return null;
+  const doRecognize = useCallback(() => {
+    if (!SpeechRecognitionAPI) return;
     const rec = new SpeechRecognitionAPI();
     rec.lang = 'zh-CN';
     rec.interimResults = true;
-    rec.continuous = true;
-    rec.maxAlternatives = 1;
+    rec.continuous = false; // false: clean session, onend = one complete utterance
+
+    let sessionText = '';
 
     rec.onresult = (e: any) => {
-      let interim = '';
-      let newFinal = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) {
-          newFinal += r[0].transcript;
-        } else {
-          interim += r[0].transcript;
-        }
+      // Rebuild full text from this session's results
+      let t = '';
+      for (let i = 0; i < e.results.length; i++) {
+        t += e.results[i][0].transcript;
       }
-      // Accumulate final results
-      if (newFinal) finalTextRef.current += newFinal;
-      // Display: all accumulated final text + current interim
-      setInput(finalTextRef.current + interim);
+      sessionText = t;
+      setInput(finalTextRef.current + sessionText);
     };
 
     rec.onerror = (e: any) => {
@@ -153,37 +147,38 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
         setMicSupported(false);
         wantsToListen.current = false;
         setListening(false);
+        return;
+      }
+      // 'no-speech' or 'aborted' — just restart if still listening
+      if (e.error === 'no-speech' || e.error === 'aborted') {
+        // onend will handle restart
       }
     };
 
     rec.onend = () => {
+      // Session ended — commit its text
+      finalTextRef.current += sessionText;
+      setInput(finalTextRef.current);
+
       if (wantsToListen.current) {
-        // Browser auto-ended (silence, etc) — create a new instance
-        // finalTextRef already holds everything said so far
-        const next = createRecognition();
-        if (next) {
-          recognitionRef.current = next;
-          try { next.start(); } catch {}
-        }
+        // Start next utterance
+        setTimeout(() => doRecognize(), 50);
       } else {
         setListening(false);
         recognitionRef.current = null;
       }
     };
 
-    return rec;
+    recognitionRef.current = rec;
+    try { rec.start(); } catch {}
   }, []);
 
   const startListening = useCallback(() => {
     finalTextRef.current = input;
     wantsToListen.current = true;
     setListening(true);
-    const rec = createRecognition();
-    if (rec) {
-      recognitionRef.current = rec;
-      try { rec.start(); } catch {}
-    }
-  }, [input, createRecognition]);
+    doRecognize();
+  }, [input, doRecognize]);
 
   const stopListening = useCallback(() => {
     wantsToListen.current = false;
@@ -264,7 +259,7 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
         </>
       )}
 
-      <div className="mt-3 flex gap-2 items-end">
+      <div className="mt-3 grid items-end gap-2" style={{ gridTemplateColumns: '1fr auto auto' }}>
         <textarea
           ref={textareaRef}
           value={input}
@@ -279,8 +274,8 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
           disabled={loading}
           rows={1}
           wrap="soft"
-          className="flex-1 outline-none text-lg bg-transparent placeholder-gray-300 resize-none leading-relaxed rounded-xl border border-surface-200 px-5 py-3.5 focus:border-medical-300 focus:ring-2 focus:ring-medical-50"
-          style={{ maxHeight: '200px', minHeight: '52px' }}
+          className="outline-none text-lg bg-white placeholder-gray-300 resize-none leading-relaxed rounded-xl border border-surface-200 px-5 py-3.5 focus:border-medical-300 focus:ring-2 focus:ring-medical-50"
+          style={{ maxHeight: '200px', minHeight: '52px', width: '100%', boxSizing: 'border-box' }}
         />
         {micSupported && (
           <button
