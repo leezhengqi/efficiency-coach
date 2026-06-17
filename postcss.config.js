@@ -1,6 +1,1 @@
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
+ZXhwb3J0IGRlZmF1bHQgew0KICBwbHVnaW5zOiB7DQogICAgdGFpbHdpbmRjc3M6IHt9LA0KICAgIGF1dG9wcmVmaXhlcjoge30sDQogIH0sDQp9Ow0K
