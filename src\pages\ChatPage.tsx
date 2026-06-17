@@ -121,59 +121,69 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
 
   // ── Voice input ──
   const wantsToListen = useRef(false);
-  const baseRef = useRef('');   // text from past sessions
-  const latestRef = useRef(''); // current full text: base + current session
+  const finalTextRef = useRef(''); // accumulated final (non-interim) text across restarts
 
-  const startRecognition = useCallback(() => {
-    if (!SpeechRecognitionAPI) return;
-    try {
-      const rec = new SpeechRecognitionAPI();
-      rec.lang = 'zh-CN';
-      rec.interimResults = true;
-      rec.continuous = true;
+  const createRecognition = useCallback(() => {
+    if (!SpeechRecognitionAPI) return null;
+    const rec = new SpeechRecognitionAPI();
+    rec.lang = 'zh-CN';
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
 
-      rec.onresult = (e: any) => {
-        // Rebuild entire current-session text — avoids duplication as interim results expand
-        let sessionText = '';
-        for (let i = 0; i < e.results.length; i++) {
-          sessionText += e.results[i][0].transcript;
-        }
-        latestRef.current = baseRef.current + sessionText;
-        setInput(latestRef.current);
-      };
-
-      rec.onerror = (e: any) => {
-        if (e.error === 'not-allowed') {
-          setMicSupported(false);
-          wantsToListen.current = false;
-          setListening(false);
-        }
-      };
-
-      rec.onend = () => {
-        if (wantsToListen.current) {
-          // Save this session's final text, then start a fresh instance
-          baseRef.current = latestRef.current;
-          startRecognition();
+    rec.onresult = (e: any) => {
+      let interim = '';
+      let newFinal = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) {
+          newFinal += r[0].transcript;
         } else {
-          setListening(false);
+          interim += r[0].transcript;
         }
-      };
+      }
+      // Accumulate final results
+      if (newFinal) finalTextRef.current += newFinal;
+      // Display: all accumulated final text + current interim
+      setInput(finalTextRef.current + interim);
+    };
 
-      rec.start();
-      recognitionRef.current = rec;
-    } catch {
-      setMicSupported(false);
-    }
+    rec.onerror = (e: any) => {
+      if (e.error === 'not-allowed') {
+        setMicSupported(false);
+        wantsToListen.current = false;
+        setListening(false);
+      }
+    };
+
+    rec.onend = () => {
+      if (wantsToListen.current) {
+        // Browser auto-ended (silence, etc) — create a new instance
+        // finalTextRef already holds everything said so far
+        const next = createRecognition();
+        if (next) {
+          recognitionRef.current = next;
+          try { next.start(); } catch {}
+        }
+      } else {
+        setListening(false);
+        recognitionRef.current = null;
+      }
+    };
+
+    return rec;
   }, []);
 
   const startListening = useCallback(() => {
-    baseRef.current = input;
-    latestRef.current = input;
+    finalTextRef.current = input;
     wantsToListen.current = true;
     setListening(true);
-    startRecognition();
-  }, [input, startRecognition]);
+    const rec = createRecognition();
+    if (rec) {
+      recognitionRef.current = rec;
+      try { rec.start(); } catch {}
+    }
+  }, [input, createRecognition]);
 
   const stopListening = useCallback(() => {
     wantsToListen.current = false;
@@ -185,7 +195,10 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
   }, []);
 
   useEffect(() => {
-    return () => { recognitionRef.current?.abort(); };
+    return () => {
+      wantsToListen.current = false;
+      recognitionRef.current?.abort();
+    };
   }, []);
 
   return (
@@ -252,44 +265,42 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
       )}
 
       <div className="mt-3 flex gap-2 items-end">
-        <div className="flex-1 flex items-end gap-2 bg-white border border-surface-200 rounded-xl px-5 py-3 focus-within:border-medical-300 focus-within:ring-2 focus-within:ring-medical-50 transition-all">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="描述你的工作内容…"
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="描述你的工作内容…"
+          disabled={loading}
+          rows={1}
+          wrap="soft"
+          className="flex-1 outline-none text-lg bg-transparent placeholder-gray-300 resize-none leading-relaxed rounded-xl border border-surface-200 px-5 py-3.5 focus:border-medical-300 focus:ring-2 focus:ring-medical-50"
+          style={{ maxHeight: '200px', minHeight: '52px' }}
+        />
+        {micSupported && (
+          <button
+            type="button"
+            onClick={() => listening ? stopListening() : startListening()}
             disabled={loading}
-            rows={1}
-            wrap="soft"
-            className="w-full outline-none text-lg bg-transparent placeholder-gray-300 resize-none leading-relaxed"
-            style={{ maxHeight: '200px', overflowY: 'auto', minHeight: '44px' }}
-          />
-          {micSupported && (
-            <button
-              type="button"
-              onClick={() => listening ? stopListening() : startListening()}
-              disabled={loading}
-              title={listening ? '点击停止' : '语音输入'}
-              className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                listening
-                  ? 'bg-red-500 text-white shadow-lg shadow-red-200 animate-pulse'
-                  : 'bg-surface-100 text-gray-400 hover:bg-medical-100 hover:text-medical-600'
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="22"/>
-              </svg>
-            </button>
-          )}
-        </div>
+            title={listening ? '点击停止' : '语音输入'}
+            className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+              listening
+                ? 'bg-red-500 text-white shadow-lg shadow-red-200 animate-pulse'
+                : 'bg-surface-100 text-gray-400 hover:bg-medical-100 hover:text-medical-600'
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </button>
+        )}
         <button
           onClick={handleSend}
           disabled={loading || !input.trim()}
