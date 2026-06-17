@@ -2,6 +2,39 @@ import { useState } from 'react';
 import StatusBadge from './StatusBadge';
 import { api } from '../api';
 
+interface Step {
+  label: string;
+  content: string;
+}
+
+function parseSteps(solution: string): Step[] {
+  if (!solution.trim()) return [];
+  const stepPattern = /第[一二三四五六七八九十\d]+步[：:]?/;
+  const rawParts = solution.split(/(?=第[一二三四五六七八九十\d]+步)/);
+  const steps: Step[] = [];
+  for (const part of rawParts) {
+    const m = part.match(stepPattern);
+    if (m) {
+      const label = m[0].replace(/[：:]/g, '');
+      const content = part.slice(m[0].length).replace(/^[\s\n]+/, '');
+      if (content) steps.push({ label, content });
+    } else if (part.trim()) {
+      steps.push({ label: '', content: part.trim() });
+    }
+  }
+  if (steps.length === 0) return [{ label: '', content: solution.trim() }];
+  return steps;
+}
+
+const STEP_COLORS = [
+  { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-500', text: 'text-blue-700' },
+  { bg: 'bg-violet-50', border: 'border-violet-200', badge: 'bg-violet-500', text: 'text-violet-700' },
+  { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-500', text: 'text-emerald-700' },
+  { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-500', text: 'text-amber-700' },
+  { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-500', text: 'text-rose-700' },
+  { bg: 'bg-cyan-50', border: 'border-cyan-200', badge: 'bg-cyan-500', text: 'text-cyan-700' },
+];
+
 interface Finding {
   id: number;
   title: string;
@@ -78,12 +111,38 @@ export default function FindingCard({ finding, onUpdate }: FindingCardProps) {
 
       {expanded && (
         <div className="mt-3 pt-3 border-t border-surface-100 space-y-3">
-          {finding.solution && (
-            <div>
-              <h4 className="text-xs font-medium text-gray-500 mb-1">解决方案</h4>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{finding.solution}</p>
-            </div>
-          )}
+          {finding.solution && (() => {
+            const steps = parseSteps(finding.solution);
+            return (
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 mb-2">解决方案</h4>
+                <div className="space-y-2">
+                  {steps.map((step, i) => {
+                    const color = STEP_COLORS[i] || STEP_COLORS[STEP_COLORS.length - 1];
+                    const hasLabel = step.label && /第[一二三四五六七八九十\d]+步/.test(step.label);
+                    return (
+                      <div
+                        key={i}
+                        className={`rounded-lg border ${color.border} ${color.bg} p-3`}
+                      >
+                        {hasLabel && (
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full ${color.badge} text-white text-[10px] font-bold`}>
+                              {i + 1}
+                            </span>
+                            <span className={`text-xs font-semibold ${color.text}`}>{step.label}</span>
+                          </div>
+                        )}
+                        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${hasLabel ? 'ml-7' : ''} ${color.text}`}>
+                          {step.content}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {finding.whyItWorks && (
             <div>
