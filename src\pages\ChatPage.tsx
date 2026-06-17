@@ -40,6 +40,15 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
   const [micSupported, setMicSupported] = useState(!!SpeechRecognitionAPI);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea when input changes (including programmatic updates from voice)
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }, [input]);
 
   // Load conversation when conversationId prop changes (from History page)
   useEffect(() => {
@@ -245,13 +254,9 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
       <div className="mt-3 flex gap-2 items-end">
         <div className="flex-1 flex items-end gap-2 bg-white border border-surface-200 rounded-xl px-5 py-3 focus-within:border-medical-300 focus-within:ring-2 focus-within:ring-medical-50 transition-all">
           <textarea
+            ref={textareaRef}
             value={input}
-            onChange={e => {
-              setInput(e.target.value);
-              // auto-resize
-              e.target.style.height = 'auto';
-              e.target.style.height = e.target.scrollHeight + 'px';
-            }}
+            onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -262,7 +267,7 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
             disabled={loading}
             rows={1}
             className="flex-1 outline-none text-lg bg-transparent placeholder-gray-300 resize-none leading-relaxed"
-            style={{ maxHeight: '200px' }}
+            style={{ maxHeight: '200px', overflowY: 'auto' }}
           />
           {micSupported && (
             <button
