@@ -111,13 +111,15 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
   };
 
   // ── Voice input ──
-  const startListening = useCallback(() => {
+  const wantsToListen = useRef(false);
+
+  const startRecognition = useCallback(() => {
     if (!SpeechRecognitionAPI) return;
     try {
       const rec = new SpeechRecognitionAPI();
       rec.lang = 'zh-CN';
       rec.interimResults = true;
-      rec.continuous = false;
+      rec.continuous = true;
 
       rec.onresult = (e: any) => {
         let transcript = '';
@@ -128,23 +130,40 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
       };
 
       rec.onerror = (e: any) => {
-        console.warn('Speech error:', e.error);
-        if (e.error === 'not-allowed') setMicSupported(false);
-        setListening(false);
+        if (e.error === 'not-allowed') {
+          setMicSupported(false);
+          wantsToListen.current = false;
+          setListening(false);
+        }
+        // 'no-speech' and 'aborted' are normal during long listening — let onend handle restart
       };
 
-      rec.onend = () => setListening(false);
+      rec.onend = () => {
+        // If user still wants to listen, restart immediately
+        if (wantsToListen.current) {
+          try { rec.start(); } catch { /* browser limit */ }
+        } else {
+          setListening(false);
+        }
+      };
+
       rec.start();
       recognitionRef.current = rec;
-      setListening(true);
     } catch {
       setMicSupported(false);
     }
   }, []);
 
+  const startListening = useCallback(() => {
+    wantsToListen.current = true;
+    setListening(true);
+    startRecognition();
+  }, [startRecognition]);
+
   const stopListening = useCallback(() => {
+    wantsToListen.current = false;
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch {}
       recognitionRef.current = null;
     }
     setListening(false);
