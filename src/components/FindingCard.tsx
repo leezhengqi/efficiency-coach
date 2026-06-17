@@ -6,6 +6,7 @@ interface Finding {
   id: number;
   title: string;
   description: string;
+  whyItWorks?: string;
   solution: string;
   tools: string[];
   script: string;
@@ -81,6 +82,13 @@ export default function FindingCard({ finding, onUpdate }: FindingCardProps) {
             <div>
               <h4 className="text-xs font-medium text-gray-500 mb-1">解决方案</h4>
               <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{finding.solution}</p>
+            </div>
+          )}
+
+          {finding.whyItWorks && (
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 mb-1">为什么有效</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">{finding.whyItWorks}</p>
             </div>
           )}
 

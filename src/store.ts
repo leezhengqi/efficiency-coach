@@ -44,6 +44,7 @@ export interface StoredFinding {
   conversation_id: number;
   title: string;
   description: string;
+  why_it_works: string;
   solution: string;
   tools: string;
   script: string;

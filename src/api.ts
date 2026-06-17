@@ -65,6 +65,7 @@ export const api = {
           conversation_id: conversationId,
           title: f.title,
           description: f.description,
+          why_it_works: f.whyItWorks || '',
           solution: f.solution,
           tools: JSON.stringify(f.tools || []),
           script: f.script || '',
@@ -90,6 +91,7 @@ export const api = {
     return store.getFindings().map(f => ({
       ...f,
       id: f.id,
+      whyItWorks: (f as any).why_it_works || '',
       tools: typeof f.tools === 'string' ? JSON.parse(f.tools || '[]') : f.tools,
       estimatedTimeSaved: f.estimated_time_saved,
       estimated_time_saved: f.estimated_time_saved,
