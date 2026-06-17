@@ -266,8 +266,9 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
             placeholder="描述你的工作内容…"
             disabled={loading}
             rows={1}
-            className="flex-1 outline-none text-lg bg-transparent placeholder-gray-300 resize-none leading-relaxed"
-            style={{ maxHeight: '200px', overflowY: 'auto' }}
+            wrap="soft"
+            className="w-full outline-none text-lg bg-transparent placeholder-gray-300 resize-none leading-relaxed"
+            style={{ maxHeight: '200px', overflowY: 'auto', minHeight: '44px' }}
           />
           {micSupported && (
             <button
