@@ -26,13 +26,20 @@ interface ChatPageProps {
   onNewFindings?: () => void;
 }
 
+// Check browser speech support
+const SpeechRecognitionAPI =
+  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
 export default function ChatPage({ conversationId, onNewFindings }: ChatPageProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [convId, setConvId] = useState<number | null>(conversationId ?? null);
+  const [listening, setListening] = useState(false);
+  const [micSupported, setMicSupported] = useState(!!SpeechRecognitionAPI);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Load conversation when conversationId prop changes (from History page)
   useEffect(() => {
@@ -103,6 +110,50 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
     setInput('');
   };
 
+  // ── Voice input ──
+  const startListening = useCallback(() => {
+    if (!SpeechRecognitionAPI) return;
+    try {
+      const rec = new SpeechRecognitionAPI();
+      rec.lang = 'zh-CN';
+      rec.interimResults = true;
+      rec.continuous = false;
+
+      rec.onresult = (e: any) => {
+        let transcript = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
+        setInput(transcript);
+      };
+
+      rec.onerror = (e: any) => {
+        console.warn('Speech error:', e.error);
+        if (e.error === 'not-allowed') setMicSupported(false);
+        setListening(false);
+      };
+
+      rec.onend = () => setListening(false);
+      rec.start();
+      recognitionRef.current = rec;
+      setListening(true);
+    } catch {
+      setMicSupported(false);
+    }
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setListening(false);
+  }, []);
+
+  useEffect(() => {
+    return () => { recognitionRef.current?.abort(); };
+  }, []);
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
       {messages.length === 0 ? (
@@ -166,15 +217,36 @@ export default function ChatPage({ conversationId, onNewFindings }: ChatPageProp
         </>
       )}
 
-      <div className="mt-3 flex gap-2">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="描述你的工作内容…"
-          disabled={loading}
-          className="flex-1 bg-white border border-surface-200 rounded-xl px-6 py-4 text-lg outline-none focus:border-medical-300 focus:ring-2 focus:ring-medical-50 transition-all disabled:opacity-50 placeholder-gray-300"
-        />
+      <div className="mt-3 flex gap-2 items-end">
+        <div className="flex-1 flex items-center gap-2 bg-white border border-surface-200 rounded-xl px-5 py-3.5 focus-within:border-medical-300 focus-within:ring-2 focus-within:ring-medical-50 transition-all">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            placeholder="描述你的工作内容…"
+            disabled={loading}
+            className="flex-1 outline-none text-lg bg-transparent placeholder-gray-300"
+          />
+          {micSupported && (
+            <button
+              type="button"
+              onClick={() => listening ? stopListening() : startListening()}
+              disabled={loading}
+              title={listening ? '点击停止' : '语音输入'}
+              className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                listening
+                  ? 'bg-red-500 text-white shadow-lg shadow-red-200 animate-pulse'
+                  : 'bg-surface-100 text-gray-400 hover:bg-medical-100 hover:text-medical-600'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+            </button>
+          )}
+        </div>
         <button
           onClick={handleSend}
           disabled={loading || !input.trim()}
